@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saneamiento CABA-AMBA | Visor Geoespacial Interactivo</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Pulsing active marker */
+        .pulse-marker-active {
+            background: #10b981;
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            animation: pulse-green 1.8s infinite;
+        }
+        .pulse-marker-pump {
+            background: #3b82f6;
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+            animation: pulse-blue 1.8s infinite;
+        }
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        @keyframes pulse-blue {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 h-screen overflow-hidden flex flex-col">
+
+    <!-- Header / Navbar -->
+    <header class="bg-slate-950 border-b border-slate-800 px-6 py-4 flex flex-wrap items-center justify-between gap-4 z-10 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-blue-600/20 text-blue-400 rounded-xl border border-blue-500/30">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    AySA: Red de Saneamiento AMBA
+                    <span class="text-xs bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full font-medium border border-blue-500/20">GIS Interactivo</span>
+                </h1>
+                <p class="text-xs text-slate-400">Plataforma integrada de análisis espacial de efluentes, bombeo e infraestructura sanitaria</p>
+            </div>
+        </div>
+
+        <!-- Acciones rápidas de carga -->
+        <div class="flex items-center gap-3">
+            <label for="kml-upload" class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-sm font-semibold rounded-xl cursor-pointer transition-all shadow-lg shadow-blue-900/20 border border-blue-400/20">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                <span>Cargar KML (Cualquier archivo)</span>
+                <input id="kml-upload" type="file" accept=".kml" multiple class="hidden" onchange="handleKMLFiles(this.files)">
+            </label>
+            <button onclick="clearAllLayers()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-xl border border-slate-700 transition">
+                Limpiar Mapa
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex overflow-hidden relative">
+
+        <!-- Sidebar Izquierdo: Control de Capas y Herramientas -->
+        <aside class="w-80 bg-slate-950 border-r border-slate-800 flex flex-col overflow-hidden shrink-0 z-10">
+            <!-- Pestañas/Tabs -->
+            <div class="flex border-b border-slate-800">
+                <button id="tab-capas-btn" onclick="switchSidebarTab('capas')" class="flex-1 py-3 text-center text-xs font-semibold tracking-wider uppercase border-b-2 border-blue-500 text-blue-400 bg-slate-900/50">
+                    Capas del Sistema
+                </button>
+                <button id="tab-estadisticas-btn" onclick="switchSidebarTab('estadisticas')" class="flex-1 py-3 text-center text-xs font-semibold tracking-wider uppercase border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+                    Métricas de Red
+                </button>
+            </div>
+
+            <!-- Tab: Capas -->
+            <div id="tab-capas" class="flex-1 overflow-y-auto p-4 space-y-5">
+                <!-- Dropzone de KML interactivo -->
+                <div class="border-2 border-dashed border-slate-700 hover:border-blue-500/50 rounded-2xl p-4 text-center cursor-pointer transition bg-slate-900/30 group" id="dropzone" onclick="document.getElementById('kml-upload').click()">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto text-slate-500 group-hover:text-blue-400 transition mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                    </svg>
+                    <span class="block text-xs font-semibold text-slate-300 group-hover:text-slate-100">Arrastra aquí tus archivos KML</span>
+                    <span class="block text-[10px] text-slate-500 mt-1">Estaciones, Plantas, Cursos, Macrocuencas o Cañerías</span>
+                </div>
+
+                <!-- Capas Cargadas Dinámicamente -->
+                <div>
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                        <span>Capas en Visualización</span>
+                        <span id="layer-count-badge" class="bg-blue-500/10 text-blue-400 text-[10px] px-2 py-0.5 rounded-full border border-blue-500/20">0 cargadas</span>
+                    </h3>
+                    <div id="layers-container" class="space-y-2">
+                        <!-- Estado vacío -->
+                        <div id="no-layers-placeholder" class="text-center py-6 px-4 bg-slate-900/20 rounded-xl border border-slate-800">
+                            <p class="text-xs text-slate-500">No se han importado archivos KML. Usa el botón superior o arrastra un archivo al recuadro para empezar.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Guía rápida de uso -->
+                <div class="p-4 bg-blue-950/20 border border-blue-900/30 rounded-2xl">
+                    <h4 class="text-xs font-bold text-blue-400 mb-1 flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Instrucciones del Operador
+                    </h4>
+                    <p class="text-[11px] text-slate-400 leading-relaxed">
+                        Carga el archivo <strong>"Planta Depuradora.kml"</strong>, <strong>"Estación de Bombeo.kml"</strong> o cualquiera de los archivos que descargaste. Posteriormente, añade el archivo de <strong>"Cañerías"</strong> para completar el análisis hidráulico.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Tab: Estadísticas -->
+            <div id="tab-estadisticas" class="hidden flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                        <span class="block text-[10px] text-slate-400 font-semibold uppercase">Ptos de Bombeo</span>
+                        <span id="stat-pumps" class="text-xl font-extrabold text-blue-400 mt-0.5 block">0</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                        <span class="block text-[10px] text-slate-400 font-semibold uppercase">Ptas Depuradoras</span>
+                        <span id="stat-plants" class="text-xl font-extrabold text-emerald-400 mt-0.5 block">0</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-800 col-span-2">
+                        <span class="block text-[10px] text-slate-400 font-semibold uppercase">Metros de Conductos/Cañerías</span>
+                        <span id="stat-pipe-length" class="text-xl font-extrabold text-amber-400 mt-0.5 block">0 m</span>
+                    </div>
+                </div>
+
+                <!-- Resumen por tipo de estado -->
+                <div class="bg-slate-900/30 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                    <h4 class="text-xs font-bold text-slate-300">Infraestructura por Estado</h4>
+                    <div class="space-y-1.5 text-xs">
+                        <div class="flex justify-between items-center py-1 border-b border-slate-800/60">
+                            <span class="text-slate-400 flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> En Servicio / Operativo
+                            </span>
+                            <span id="count-status-servicio" class="font-bold text-white">0</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1 border-b border-slate-800/60">
+                            <span class="text-slate-400 flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-yellow-500"></span> Proyectado / En Ejecución
+                            </span>
+                            <span id="count-status-proyecto" class="font-bold text-white">0</span>
+                        </div>
+                        <div class="flex justify-between items-center py-1">
+                            <span class="text-slate-400 flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-slate-500"></span> Otros / Desconocido
+                            </span>
+                            <span id="count-status-otros" class="font-bold text-white">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Centro: Mapa de Leaflet -->
+        <section class="flex-1 h-full relative" id="map-container">
+            <div id="map" class="w-full h-full bg-slate-900"></div>
+
+            <!-- Capa flotante: Carga de Archivos / Indicador de Procesamiento -->
+            <div id="loader-overlay" class="absolute inset-0 bg-slate-950/80 z-[1000] flex flex-col items-center justify-center gap-3 hidden">
+                <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <p id="loader-text" class="text-sm font-semibold text-slate-200">Procesando información geoespacial...</p>
+                <div class="w-64 bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
+                    <div id="loader-progress" class="bg-blue-500 h-full w-0 transition-all duration-300"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sidebar Derecho: Panel de Detalle de Elementos Seleccionados -->
+        <aside class="w-96 bg-slate-950 border-l border-slate-800 flex flex-col overflow-hidden shrink-0 z-10" id="detail-panel">
+            <div class="px-5 py-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between">
+                <h2 class="font-bold text-white text-sm tracking-wide uppercase">Ficha Técnica de Elemento</h2>
+                <button onclick="clearInspectorSelection()" class="text-slate-500 hover:text-slate-300 text-xs">Cerrar</button>
+            </div>
+            
+            <div id="detail-panel-content" class="flex-1 overflow-y-auto p-5 space-y-5">
+                <!-- Sin Selección Inicial -->
+                <div id="empty-detail-placeholder" class="text-center py-20 px-6 space-y-4">
+                    <div class="w-14 h-14 bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center mx-auto text-slate-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-semibold text-slate-300">Ningún elemento seleccionado</h4>
+                        <p class="text-[11px] text-slate-500 mt-1 max-w-xs mx-auto">Haz clic sobre cualquier marcador de planta, estación de bombeo, curso o cañería en el mapa para inspeccionar sus atributos técnicos.</p>
+                    </div>
+                </div>
+
+                <!-- Contenido Dinámico de Selección (Oculto al inicio) -->
+                <div id="detail-inspector-body" class="space-y-4 hidden">
+                    <div class="space-y-1.5">
+                        <span id="detail-type-badge" class="px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider inline-block">TIPO_ESTABLECIMIENTO</span>
+                        <h3 id="detail-title" class="text-lg font-bold text-white leading-tight">Nombre del Establecimiento</h3>
+                    </div>
+
+                    <!-- Datos Críticos / Métricas del Elemento -->
+                    <div id="detail-metrics" class="grid grid-cols-2 gap-2 pt-2">
+                        <!-- Inyectados dinámicamente -->
+                    </div>
+
+                    <!-- Tabla de Atributos del KML -->
+                    <div class="space-y-2">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Atributos del Esquema (KML)</h4>
+                        <div id="detail-attributes" class="border border-slate-800 rounded-xl overflow-hidden text-xs bg-slate-900/15 divide-y divide-slate-800">
+                            <!-- Filas inyectadas dinámicamente -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+    </main>
+
+    <!-- Modal de notificación personalizado -->
+    <div id="custom-toast" class="fixed bottom-5 right-5 z-[5000] bg-slate-900 border border-slate-800 px-4 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 max-w-md transform translate-y-20 opacity-0 transition-all duration-300">
+        <div id="toast-icon-box" class="p-2 rounded-lg text-white"></div>
+        <div>
+            <h5 id="toast-title" class="text-xs font-bold text-white"></h5>
+            <p id="toast-message" class="text-[11px] text-slate-400 mt-0.5"></p>
+        </div>
+    </div>
+
+    <!-- Inicialización del Mapa e interactividad -->
+    <script>
+        let map;
+        let loadedLayers = {}; // Almacén de capas Leaflet indexadas por ID del archivo
+        let baseMaps = {};
+        const colors = [
+            '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
+            '#ec4899', '#06b6d4', '#14b8a6', '#f43f5e', '#a855f7'
+        ];
+        let colorIndex = 0;
+
+        // Inicialización al cargar el DOM
+        window.onload = function () {
+            initMap();
+            setupDragAndDrop();
+            loadPreloadedDemoData();
+        };
+
+        // Configuración inicial del Mapa Leaflet
+        function initMap() {
+            // Inicializar el mapa centrado en el AMBA (Buenos Aires)
+            map = L.map('map', {
+                center: [-34.66, -58.48],
+                zoom: 11,
+                zoomControl: false
+            });
+
+            // Crear y agregar el control de zoom arriba a la derecha
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            // Capas base de mapas
+            const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            });
+
+            const lightMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+                subdomains: 'abcd',
+                maxZoom: 20
+            });
+
+            const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            });
+
+            // Activar capa oscura por defecto
+            darkMap.addTo(map);
+
+            baseMaps = {
+                "Gris Oscuro": darkMap,
+                "Gris Claro": lightMap,
+                "Satélite Esri": satelliteMap
+            };
+
+            // Agregar control de capas en el mapa en la esquina superior derecha
+            L.control.layers(baseMaps, null, { position: 'topright', collapsed: true }).addTo(map);
+        }
+
+        // Simula la visualización de un conjunto inicial para no dejar el mapa en blanco
+        function loadPreloadedDemoData() {
+            showToast(
+                'Visor Listo',
+                'Arrastra o carga tus archivos KML de plantas, estaciones de bombeo o cañerías para iniciar el análisis.',
+                'info'
+            );
+        }
+
+        // Arrastrar y soltar archivos KML
+        function setupDragAndDrop() {
+            const dropzone = document.getElementById('dropzone');
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    dropzone.classList.add('border-blue-500', 'bg-blue-950/10');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    dropzone.classList.remove('border-blue-500', 'bg-blue-950/10');
+                }, false);
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                handleKMLFiles(files);
+            }, false);
+        }
+
+        // Manejar e importar los archivos KML seleccionados
+        function handleKMLFiles(files) {
+            if (!files || files.length === 0) return;
+
+            const filesArray = Array.from(files);
+            const kmlFiles = filesArray.filter(f => f.name.toLowerCase().endsWith('.kml'));
+
+            if (kmlFiles.length === 0) {
+                showToast('Archivo Inválido', 'Por favor selecciona únicamente archivos de formato KML (.kml)', 'error');
+                return;
+            }
+
+            document.getElementById('loader-overlay').classList.remove('hidden');
+            let processedCount = 0;
+
+            kmlFiles.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const text = e.target.result;
+                    document.getElementById('loader-text').innerText = `Procesando: ${file.name}...`;
+                    document.getElementById('loader-progress').style.width = `${((index + 1) / kmlFiles.length) * 100}%`;
+
+                    try {
+                        parseAndDisplayKML(text, file.name);
+                    } catch (err) {
+                        console.error("Error al parsear el archivo KML:", err);
+                        showToast('Error de Lectura', `No pudimos procesar el archivo "${file.name}"`, 'error');
+                    }
+
+                    processedCount++;
+                    if (processedCount === kmlFiles.length) {
+                        setTimeout(() => {
+                            document.getElementById('loader-overlay').classList.add('hidden');
+                            document.getElementById('loader-progress').style.width = '0%';
+                            updateStats();
+                        }, 500);
+                    }
+                };
+                reader.readAsText(file);
+            });
+        }
+
+        // PARSER KML NATIVO (Extracción robusta de geometría, estilos y ExtendedData)
+        function parseAndDisplayKML(kmlText, fileName) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(kmlText, "text/xml");
+            const placemarks = xmlDoc.getElementsByTagName("Placemark");
+
+            if (placemarks.length === 0) {
+                showToast('Archivo Vacío', `No se encontraron elementos espaciales (Placemarks) en "${fileName}"`, 'warning');
+                return;
+            }
+
+            const layerId = 'layer_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+            const color = colors[colorIndex % colors.length];
+            colorIndex++;
+
+            const leafletLayerGroup = L.featureGroup();
+            const featuresData = [];
+
+            // Detectamos si el KML contiene principalmente cañerías, puntos de bombeo, etc., para estilizar adecuadamente
+            const nameLower = fileName.toLowerCase();
+            let suggestedType = 'Desconocido';
+            if (nameLower.includes('bombeo') || nameLower.includes('establecimiento_bombeo')) suggestedType = 'Bombeo';
+            else if (nameLower.includes('planta') || nameLower.includes('depuradora')) suggestedType = 'Planta Depuradora';
+            else if (nameLower.includes('cañería') || nameLower.includes('cañeria') || nameLower.includes('linea') || nameLower.includes('lnea')) suggestedType = 'Conductos';
+            else if (nameLower.includes('curso') || nameLower.includes('hidrico') || nameLower.includes('hdrico')) suggestedType = 'Curso Hídrico';
+            else if (nameLower.includes('cuenca') || nameLower.includes('macrocuenca')) suggestedType = 'Macrocuenca';
+
+            for (let i = 0; i < placemarks.length; i++) {
+                const placemark = placemarks[i];
+                
+                // 1. Obtener Metadatos del Placemark
+                const name = placemark.getElementsByTagName("name")[0]?.textContent || `Elemento ${i + 1}`;
+                const description = placemark.getElementsByTagName("description")[0]?.textContent || '';
+                
+                // Extraer atributos complejos estructurados en ExtendedData
+                const attributes = {};
+                const simpleDatas = placemark.getElementsByTagName("SimpleData");
+                for (let j = 0; j < simpleDatas.length; j++) {
+                    const nameAttr = simpleDatas[j].getAttribute("name");
+                    const valueAttr = simpleDatas[j].textContent;
+                    if (nameAttr) attributes[nameAttr] = valueAttr;
+                }
+
+                // Si no hay SimpleData, buscar tags genéricos data/value
+                if (Object.keys(attributes).length === 0) {
+                    const dataNodes = placemark.getElementsByTagName("Data");
+                    for (let j = 0; j < dataNodes.length; j++) {
+                        const nameAttr = dataNodes[j].getAttribute("name");
+                        const valueAttr = dataNodes[j].getElementsByTagName("value")[0]?.textContent;
+                        if (nameAttr && valueAttr) attributes[nameAttr] = valueAttr;
+                    }
+                }
+
+                // Forzar campos clave si no se detectaron automáticamente
+                const status = attributes['SITUACIO_D'] || attributes['ESTADO'] || 'Activo';
+                const diamIn = attributes['DIAM_IN'] || null;
+                const diamOut = attributes['DIAM_OUT'] || null;
+                const caudal = attributes['CAUDAL'] || null;
+                const habitantes = attributes['HABITANTES'] || attributes['POB10'] || null;
+
+                // 2. Procesar Geometría (Puntos, Líneas o Polígonos)
+                let geometryType = null;
+                let coordinates = [];
+
+                // Caso A: Punto (Estaciones, Plantas, Establecimientos de Bombeo)
+                const pointNode = placemark.getElementsByTagName("Point")[0];
+                if (pointNode) {
+                    geometryType = 'Point';
+                    const coordString = pointNode.getElementsByTagName("coordinates")[0]?.textContent;
+                    if (coordString) {
+                        const parts = coordString.trim().split(',');
+                        if (parts.length >= 2) {
+                            coordinates = [parseFloat(parts[1]), parseFloat(parts[0])]; // Leaflet usa [lat, lng]
+                        }
+                    }
+                }
+
+                // Caso B: Líneas / Trazados (Cañerías, Cursos Hídricos, Emisarios)
+                const lineNode = placemark.getElementsByTagName("LineString")[0];
+                if (lineNode) {
+                    geometryType = 'LineString';
+                    const coordString = lineNode.getElementsByTagName("coordinates")[0]?.textContent;
+                    if (coordString) {
+                        coordinates = parseCoordinatesString(coordString);
+                    }
+                }
+
+                // Caso C: Polígono (Macrocuencas, Áreas de influencia)
+                const polyNode = placemark.getElementsByTagName("Polygon")[0];
+                if (polyNode) {
+                    geometryType = 'Polygon';
+                    // Extraer límite exterior
+                    const outerRing = polyNode.getElementsByTagName("outerBoundaryIs")[0];
+                    if (outerRing) {
+                        const coordString = outerRing.getElementsByTagName("coordinates")[0]?.textContent;
+                        if (coordString) {
+                            coordinates = parseCoordinatesString(coordString);
+                        }
+                    }
+                }
+
+                // MultiGeometry Fallback
+                if (!geometryType) {
+                    const multiGeom = placemark.getElementsByTagName("MultiGeometry")[0];
+                    if (multiGeom) {
+                        const firstLine = multiGeom.getElementsByTagName("LineString")[0];
+                        if (firstLine) {
+                            geometryType = 'LineString';
+                            const coordString = firstLine.getElementsByTagName("coordinates")[0]?.textContent;
+                            if (coordString) coordinates = parseCoordinatesString(coordString);
+                        } else {
+                            const firstPoint = multiGeom.getElementsByTagName("Point")[0];
+                            if (firstPoint) {
+                                geometryType = 'Point';
+                                const coordString = firstPoint.getElementsByTagName("coordinates")[0]?.textContent;
+                                if (coordString) {
+                                    const parts = coordString.trim().split(',');
+                                    if (parts.length >= 2) coordinates = [parseFloat(parts[1]), parseFloat(parts[0])];
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Crear elemento en el mapa basándonos en el tipo de Geometría
+                if (geometryType && coordinates.length > 0) {
+                    let mapLayerElement;
+
+                    if (geometryType === 'Point') {
+                        // Personalización del Marcador según sea planta o bombeo
+                        let markerHtml = `<div class="w-3.5 h-3.5 rounded-full border-2 border-slate-900 shadow-md ${suggestedType === 'Bombeo' ? 'pulse-marker-pump' : 'pulse-marker-active'}"></div>`;
+                        
+                        const customIcon = L.divIcon({
+                            className: 'custom-div-icon',
+                            html: markerHtml,
+                            iconSize: [16, 16],
+                            iconAnchor: [8, 8]
+                        });
+
+                        mapLayerElement = L.marker(coordinates, { icon: customIcon });
+
+                    } else if (geometryType === 'LineString') {
+                        // Estilo para cañerías o ríos
+                        let weight = 3;
+                        let lineDash = null;
+                        let strokeColor = color;
+
+                        if (suggestedType === 'Conductos') {
+                            // Si tiene diámetros importantes, hacer caño más ancho
+                            const diameter = Math.max(parseFloat(diamIn || 0), parseFloat(diamOut || 0));
+                            if (diameter > 2000) weight = 6;
+                            else if (diameter > 1000) weight = 4.5;
+                            else weight = 3;
+                            
+                            strokeColor = '#f59e0b'; // Color ámbar/naranja representativo de cloacas/cañerías
+                        } else if (suggestedType === 'Curso Hídrico') {
+                            strokeColor = '#06b6d4'; // Color cian para ríos y arroyos
+                            weight = 2.5;
+                        }
+
+                        mapLayerElement = L.polyline(coordinates, {
+                            color: strokeColor,
+                            weight: weight,
+                            opacity: 0.85,
+                            dashArray: lineDash
+                        });
+
+                    } else if (geometryType === 'Polygon') {
+                        // Estilo para áreas de macrocuenca
+                        mapLayerElement = L.polygon(coordinates, {
+                            fillColor: color,
+                            fillOpacity: 0.15,
+                            color: color,
+                            weight: 1.5,
+                            opacity: 0.6
+                        });
+                    }
+
+                    if (mapLayerElement) {
+                        // Guardar referencia del elemento
+                        const featureObject = {
+                            id: `feat_${layerId}_${i}`,
+                            name: name,
+                            type: suggestedType,
+                            geometryType: geometryType,
+                            attributes: attributes,
+                            coordinates: coordinates,
+                            status: status,
+                            caudal: caudal,
+                            habitantes: habitantes,
+                            diamIn: diamIn,
+                            diamOut: diamOut
+                        };
+
+                        // Vincular eventos interactivos
+                        mapLayerElement.on('click', (e) => {
+                            L.DomEvent.stopPropagation(e);
+                            inspectElement(featureObject, mapLayerElement);
+                        });
+
+                        // Tooltip simple
+                        mapLayerElement.bindTooltip(`<span class="font-bold text-slate-800">${name}</span>`, {
+                            sticky: true,
+                            className: 'px-2 py-1 bg-white text-slate-800 text-xs border border-slate-200 rounded shadow-md font-semibold'
+                        });
+
+                        leafletLayerGroup.addLayer(mapLayerElement);
+                        featuresData.push(featureObject);
+                    }
+                }
+            }
+
+            // Registrar y renderizar el Layer Group en el mapa
+            leafletLayerGroup.addTo(map);
+            
+            loadedLayers[layerId] = {
+                name: fileName.replace('.kml', ''),
+                type: suggestedType,
+                layerGroup: leafletLayerGroup,
+                color: color,
+                visible: true,
+                features: featuresData
+            };
+
+            // Volar el mapa a los límites de esta capa cargada
+            try {
+                map.fitBounds(leafletLayerGroup.getBounds(), { padding: [40, 40], maxZoom: 14 });
+            } catch (err) {
+                // En caso de que sea un solo punto y no se puedan obtener los bounds
+                if (featuresData.length > 0 && featuresData[0].geometryType === 'Point') {
+                    map.setView(featuresData[0].coordinates, 13);
+                }
+            }
+
+            updateLayersListUI();
+            showToast('Capa Importada', `Se cargaron ${featuresData.length} elementos de "${fileName}"`, 'success');
+        }
+
+        // Parseador helper de string de coordenadas de KML "lng,lat,alt lng,lat,alt ..."
+        function parseCoordinatesString(coordString) {
+            const points = [];
+            const coordsArray = coordString.trim().split(/\s+/);
+            coordsArray.forEach(coord => {
+                const parts = coord.split(',');
+                if (parts.length >= 2) {
+                    const lng = parseFloat(parts[0]);
+                    const lat = parseFloat(parts[1]);
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        points.push([lat, lng]); // Invertimos para Leaflet
+                    }
+                }
+            });
+            return points;
+        }
+
+        // Actualizar la interfaz de la lista de capas a la izquierda
+        function updateLayersListUI() {
+            const container = document.getElementById('layers-container');
+            const keys = Object.keys(loadedLayers);
+
+            document.getElementById('layer-count-badge').innerText = `${keys.length} ${keys.length === 1 ? 'capa' : 'capas'}`;
+
+            if (keys.length === 0) {
+                container.innerHTML = `
+                    <div id="no-layers-placeholder" class="text-center py-6 px-4 bg-slate-900/20 rounded-xl border border-slate-800">
+                        <p class="text-xs text-slate-500">No se han importado archivos KML. Usa el botón superior o arrastra un archivo al recuadro para empezar.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+            keys.forEach(id => {
+                const layer = loadedLayers[id];
+                let layerIconSvg = '';
+
+                // Icono dinámico según tipo de red
+                if (layer.type === 'Bombeo') {
+                    layerIconSvg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />`;
+                } else if (layer.type === 'Planta Depuradora') {
+                    layerIconSvg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547" />`;
+                } else if (layer.type === 'Conductos') {
+                    layerIconSvg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 15.21" />`;
+                } else {
+                    layerIconSvg = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />`;
+                }
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-900 border border-slate-800/80 rounded-xl p-3.5 space-y-3 transition hover:border-slate-700";
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2.5 overflow-hidden">
+                            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: ${layer.color}"></span>
+                            <div class="truncate">
+                                <h4 class="text-xs font-bold text-white truncate" title="${layer.name}">${layer.name}</h4>
+                                <span class="text-[10px] text-slate-400 font-medium">${layer.features.length} elementos • ${layer.type}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1 shrink-0">
+                            <!-- Toggle Visibilidad -->
+                            <button onclick="toggleLayerVisibility('${id}')" class="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition" id="vis-btn-${id}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                            <!-- Eliminar Capa -->
+                            <button onclick="deleteLayer('${id}')" class="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-slate-800 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // Toggle para ocultar / mostrar capas en el mapa
+        function toggleLayerVisibility(id) {
+            const layer = loadedLayers[id];
+            const btn = document.getElementById(`vis-btn-${id}`);
+            
+            if (layer.visible) {
+                map.removeLayer(layer.layerGroup);
+                layer.visible = false;
+                btn.classList.add('text-slate-600');
+                btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7a10.024 10.024 0 012.248-3.954m3.936-2.083A10.012 10.012 0 0112 5c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-2.248 3.954m-4.356-4.356A3 3 0 1012 15h0" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3l18 18" />
+                    </svg>
+                `;
+            } else {
+                map.addLayer(layer.layerGroup);
+                layer.visible = true;
+                btn.classList.remove('text-slate-600');
+                btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                `;
+            }
+            updateStats();
+        }
+
+        // Eliminar por completo una capa cargada
+        function deleteLayer(id) {
+            const layer = loadedLayers[id];
+            map.removeLayer(layer.layerGroup);
+            delete loadedLayers[id];
+            updateLayersListUI();
+            updateStats();
+            clearInspectorSelection();
+            showToast('Capa Eliminada', `Se removió la capa "${layer.name}" del visualizador`, 'info');
+        }
+
+        // Eliminar todas las capas cargadas
+        function clearAllLayers() {
+            Object.keys(loadedLayers).forEach(id => {
+                map.removeLayer(loadedLayers[id].layerGroup);
+            });
+            loadedLayers = {};
+            colorIndex = 0;
+            updateLayersListUI();
+            updateStats();
+            clearInspectorSelection();
+            showToast('Mapa Limpio', 'Se removieron todos los elementos del mapa de trabajo', 'info');
+        }
+
+        // Cambiar pestañas del menú lateral izquierdo
+        function switchSidebarTab(tabName) {
+            const capsBtn = document.getElementById('tab-capas-btn');
+            const statsBtn = document.getElementById('tab-estadisticas-btn');
+            const capsTab = document.getElementById('tab-capas');
+            const statsTab = document.getElementById('tab-estadisticas');
+
+            if (tabName === 'capas') {
+                capsBtn.classList.add('border-blue-500', 'text-blue-400');
+                capsBtn.classList.remove('border-transparent', 'text-slate-400');
+                statsBtn.classList.add('border-transparent', 'text-slate-400');
+                statsBtn.classList.remove('border-blue-500', 'text-blue-400');
+                capsTab.classList.remove('hidden');
+                statsTab.classList.add('hidden');
+            } else {
+                statsBtn.classList.add('border-blue-500', 'text-blue-400');
+                statsBtn.classList.remove('border-transparent', 'text-slate-400');
+                capsBtn.classList.add('border-transparent', 'text-slate-400');
+                capsBtn.classList.remove('border-blue-500', 'text-blue-400');
+                statsTab.classList.remove('hidden');
+                capsTab.classList.add('hidden');
+            }
+        }
+
+        // Limpiar inspector derecho
+        function clearInspectorSelection() {
+            document.getElementById('empty-detail-placeholder').classList.remove('hidden');
+            document.getElementById('detail-inspector-body').classList.add('hidden');
+        }
+
+        // Mostrar ficha técnica en el panel lateral derecho al hacer click
+        function inspectElement(feature, layerElement) {
+            document.getElementById('empty-detail-placeholder').classList.add('hidden');
+            const inspectorBody = document.getElementById('detail-inspector-body');
+            inspectorBody.classList.remove('hidden');
+
+            // Asignar Títulos
+            const titleEl = document.getElementById('detail-title');
+            const typeBadge = document.getElementById('detail-type-badge');
+            
+            titleEl.innerText = feature.name;
+            typeBadge.innerText = feature.type || 'Infraestructura';
+
+            // Ajustar badge de tipo con colores técnicos
+            typeBadge.className = "px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider inline-block ";
+            if (feature.type === 'Bombeo') {
+                typeBadge.classList.add('bg-blue-500/10', 'text-blue-400', 'border', 'border-blue-500/20');
+            } else if (feature.type === 'Planta Depuradora') {
+                typeBadge.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border', 'border-emerald-500/20');
+            } else if (feature.type === 'Conductos') {
+                typeBadge.classList.add('bg-amber-500/10', 'text-amber-400', 'border', 'border-amber-500/20');
+            } else {
+                typeBadge.classList.add('bg-slate-800', 'text-slate-300');
+            }
+
+            // Crear Bloques Métricos Críticos
+            const metricsContainer = document.getElementById('detail-metrics');
+            metricsContainer.innerHTML = '';
+
+            // Mostrar métricas si existen en sus atributos
+            if (feature.caudal) {
+                metricsContainer.innerHTML += `
+                    <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                        <span class="block text-[10px] text-slate-400 font-semibold uppercase">Caudal Medio</span>
+                        <span class="text-sm font-extrabold text-blue-400">${feature.caudal} m³/s</span>
+                    </div>
+                `;
+            }
+            if (feature.habitantes) {
+                metricsContainer.innerHTML += `
+                    <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
+                        <span class="block text-[10px] text-slate-400 font-semibold uppercase">Población Servida</span>
+                        <span class="text-sm font-extrabold text-emerald-400">${parseInt(feature.habitantes).toLocaleString('es-AR')} hab</span>
+                    </div>
+                `;
+            }
+            if (feature.diamIn || feature.diamOut) {
+                const din = feature.diamIn ? `${feature.diamIn}mm` : '-';
+                const dout = feature.diamOut ? `${feature.diamOut}mm` : '-';
+                metricsContainer.innerHTML += `
+                    <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800 col-span-2 flex justify-between items-center">
+                        <div>
+                            <span class="block text-[9px] text-slate-400 font-semibold uppercase">Diámetro Entrada</span>
+                            <span class="text-xs font-bold text-amber-400">${din}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="block text-[9px] text-slate-400 font-semibold uppercase">Diámetro Salida</span>
+                            <span class="text-xs font-bold text-amber-400">${dout}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Estado Operativo
+            if (feature.status) {
+                metricsContainer.innerHTML += `
+                    <div class="bg-slate-900 p-2.5 rounded-xl border border-slate-800 col-span-2 flex items-center justify-between">
+                        <span class="text-[10px] text-slate-400 font-semibold uppercase">SITUACIÓN OPERATIVA</span>
+                        <span class="text-xs font-bold px-2 py-0.5 rounded-full ${feature.status.toLowerCase().includes('servicio') || feature.status.toLowerCase().includes('finalizado') ? 'bg-emerald-500/10 text-emerald-400' : 'bg-yellow-500/10 text-yellow-400'}">${feature.status}</span>
+                    </div>
+                `;
+            }
+
+            // Inyectar listado completo de atributos del KML
+            const attrsContainer = document.getElementById('detail-attributes');
+            attrsContainer.innerHTML = '';
+
+            const keys = Object.keys(feature.attributes);
+            if (keys.length === 0) {
+                attrsContainer.innerHTML = `<div class="p-3 text-slate-500 text-center">No hay atributos adicionales en este elemento.</div>`;
+            } else {
+                keys.forEach(key => {
+                    const value = feature.attributes[key];
+                    // Evitar duplicar geometrías pesadas de atributos si existen
+                    if (key.toUpperCase().includes('GEOMETRY') || key === 'coordinates') return;
+                    
+                    const row = document.createElement('div');
+                    row.className = "p-2.5 flex justify-between items-start gap-4 hover:bg-slate-900/50";
+                    row.innerHTML = `
+                        <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-tight shrink-0 select-all">${key}</span>
+                        <span class="text-[11px] text-slate-200 text-right font-medium break-all select-all">${value}</span>
+                    `;
+                    attrsContainer.appendChild(row);
+                });
+            }
+        }
+
+        // Calcular Métricas Globales y acumuladas de las capas cargadas
+        function updateStats() {
+            let totalPumps = 0;
+            let totalPlants = 0;
+            let totalPipeLength = 0; // en metros
+
+            let statusServicio = 0;
+            let statusProyecto = 0;
+            let statusOtros = 0;
+
+            Object.keys(loadedLayers).forEach(id => {
+                const layer = loadedLayers[id];
+                if (!layer.visible) return; // Solo calcular estadísticas de lo que es visible
+
+                layer.features.forEach(feat => {
+                    // Contadores de Establecimientos
+                    if (feat.type === 'Bombeo') {
+                        totalPumps++;
+                    } else if (feat.type === 'Planta Depuradora') {
+                        totalPlants++;
+                    } else if (feat.type === 'Conductos') {
+                        // Calcular longitud de la línea en metros (Leaflet latlng distancias)
+                        if (feat.geometryType === 'LineString' && feat.coordinates.length > 1) {
+                            let lineDist = 0;
+                            for (let i = 0; i < feat.coordinates.length - 1; i++) {
+                                const p1 = L.latLng(feat.coordinates[i]);
+                                const p2 = L.latLng(feat.coordinates[i+1]);
+                                lineDist += p1.distanceTo(p2);
+                            }
+                            totalPipeLength += lineDist;
+                        }
+                    }
+
+                    // Contadores de Situaciones
+                    const s = feat.status ? feat.status.toLowerCase() : '';
+                    if (s.includes('servicio') || s.includes('activo') || s.includes('finalizado') || s.includes('operativo')) {
+                        statusServicio++;
+                    } else if (s.includes('proyecto') || s.includes('ejecucion') || s.includes('ejecuci') || s.includes('planific')) {
+                        statusProyecto++;
+                    } else {
+                        statusOtros++;
+                    }
+                });
+            });
+
+            // Actualizar UI de métricas
+            document.getElementById('stat-pumps').innerText = totalPumps;
+            document.getElementById('stat-plants').innerText = totalPlants;
+            
+            // Mostrar metros o kilómetros
+            if (totalPipeLength > 1000) {
+                document.getElementById('stat-pipe-length').innerText = `${(totalPipeLength / 1000).toFixed(2)} km`;
+            } else {
+                document.getElementById('stat-pipe-length').innerText = `${Math.round(totalPipeLength)} m`;
+            }
+
+            document.getElementById('count-status-servicio').innerText = statusServicio;
+            document.getElementById('count-status-proyecto').innerText = statusProyecto;
+            document.getElementById('count-status-otros').innerText = statusOtros;
+        }
+
+        // Sistema de notificaciones (Toast)
+        function showToast(title, message, type = 'success') {
+            const toast = document.getElementById('custom-toast');
+            const iconBox = document.getElementById('toast-icon-box');
+            const titleEl = document.getElementById('toast-title');
+            const msgEl = document.getElementById('toast-message');
+
+            titleEl.innerText = title;
+            msgEl.innerText = message;
+
+            // Clases por tipo
+            iconBox.className = "p-2 rounded-lg text-white shrink-0 ";
+            if (type === 'success') {
+                iconBox.classList.add('bg-emerald-500');
+                iconBox.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                    </svg>
+                `;
+            } else if (type === 'error') {
+                iconBox.classList.add('bg-red-500');
+                iconBox.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                `;
+            } else if (type === 'warning') {
+                iconBox.classList.add('bg-yellow-500');
+                iconBox.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                `;
+            } else {
+                iconBox.classList.add('bg-blue-500');
+                iconBox.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                `;
+            }
+
+            // Mostrar
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            
+            // Ocultar tras 5 segundos
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
